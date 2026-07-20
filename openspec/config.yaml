@@ -1,0 +1,33 @@
+project:
+  name: react-tech-slider-new-demo
+  description: >
+    Polished interactive playground for the React Tech Slider package.
+  stack:
+    - React
+    - Vite
+    - TypeScript
+  scaffold:
+    keep_vite_template: true
+    skip_demo_implementation: true
+product_intent:
+  - Let users change Slider props and see results live.
+  - Compare the standard Slider with the new fades variant.
+  - Switch install instructions between npm and pnpm.
+  - Show generated usage code.
+sdd:
+  execution_mode: interactive
+  strict_tdd: true
+  phase_rules:
+    - Complete only the current SDD phase.
+    - Keep technical artifacts in English.
+    - Avoid implementation work during context initialization.
+    - Prefer small, cohesive, reviewable changes.
+testing:
+  runner: pnpm
+  verification_commands:
+    build: pnpm build
+    lint: pnpm lint
+  test_script: absent
+notes:
+  - No dedicated automated test runner is configured in package.json.
+  - The scaffold uses Vite, React, TypeScript, and ESLint checks.
