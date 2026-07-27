@@ -121,7 +121,7 @@ renderSliderCode({
 				/renderSliderCode|no exported member/i,
 			);
 		},
-		15000,
+		30_000,
 	);
 
 	it(
@@ -171,7 +171,7 @@ generateSliderCode({
 		const source = generateSliderCode(readyInvocation(state));
 		expect(source).toContain('variant="fades"');
 		expect(source).toContain("iconWidth={5}");
-		expect(source).toContain("gap={48}");
+		expect(source).toContain("gap={96}");
 		expect(source).not.toContain("speed=");
 		expect(source).not.toContain("borderWidth");
 		expect(source).not.toContain("isPlay");

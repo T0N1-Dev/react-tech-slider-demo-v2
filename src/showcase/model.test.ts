@@ -51,7 +51,7 @@ const NUMERIC_CASES = [
 	["iconWidth", 5, 1, 10, 0, 11, 1.13, 1.25],
 	["borderWidth", 1, 0, 8, -1, 9, 3.4, 3],
 	["durationMs", 30000, 5000, 120000, 4999, 120001, 5555, 6000],
-	["gap", 48, 0, 180, -1, 181, 51, 52],
+	["gap", 96, 0, 180, -1, 181, 51, 52],
 	["speed", 1, 0.25, 4, 0, 5, 1.13, 1.25],
 ] as const;
 
@@ -130,7 +130,7 @@ describe("playground state", () => {
 				pauseOnHoverActive: false,
 				durationMs: 30000,
 			},
-			fades: { gap: 48, speed: 1 },
+			fades: { gap: 96, speed: 1 },
 		});
 		expect(createInitialState(true)).toEqual({
 			...createInitialState(false),
@@ -291,7 +291,7 @@ describe("canonical slider invocation", () => {
 		expect(result.invocation.dataset).toBe(CORE_BRANDS);
 		expect(result.invocation.props).toEqual([
 			{ name: "iconWidth", value: 5, source: "always" },
-			{ name: "gap", value: 48, source: "always" },
+			{ name: "gap", value: 96, source: "always" },
 			{ name: "speed", value: 1, source: "omit-when-package-default" },
 		]);
 	});

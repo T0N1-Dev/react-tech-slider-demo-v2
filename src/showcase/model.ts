@@ -153,7 +153,7 @@ export function createInitialState(reduceMotion: boolean): PlaygroundState {
 			pauseOnHoverActive: false,
 			durationMs: 30000,
 		},
-		fades: { gap: 48, speed: 1 },
+		fades: { gap: 96, speed: 1 },
 	};
 }
 

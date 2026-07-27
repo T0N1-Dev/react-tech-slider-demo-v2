@@ -15,8 +15,8 @@ importers:
         specifier: ^19.2.7
         version: 19.2.7(react@19.2.7)
       react-tech-slider:
-        specifier: ^1.9.3
-        version: 1.9.3(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
+        specifier: ^1.10.0
+        version: 1.10.0(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
     devDependencies:
       '@eslint/js':
         specifier: ^10.0.1
@@ -1061,8 +1061,8 @@ packages:
   react-is@17.0.2:
     resolution: {integrity: sha512-w2GsyukL62IJnlaff/nRegPQR94C/XXamvMWmSHRJ4y7Ts/4ocGRmTHvOs8PSE6pB3dWOrD/nueuU5sduBsQ4w==}
 
-  react-tech-slider@1.9.3:
-    resolution: {integrity: sha512-nZO4QHZPs/V/yTajy5C3iMHB35PzfhzTRuPubNo2Lssj4h95s1D6YYps5Ugb4tNEXdi1Ycal6DZ70Dqpm2c7Dw==}
+  react-tech-slider@1.10.0:
+    resolution: {integrity: sha512-dNgRoNOiPCK8T+ZbuvjKs8z7I6NWLqSHjTMV4y+38MP6DzH2dwqtS3KYc65adCq7OvjfMky1kPS717DBwBhc4Q==}
     peerDependencies:
       react: ^19.1.0
       react-dom: ^17.0.0 || ^18.0.0 || ^19.0.0
@@ -2277,7 +2277,7 @@ snapshots:
 
   react-is@17.0.2: {}
 
-  react-tech-slider@1.9.3(react-dom@19.2.7(react@19.2.7))(react@19.2.7):
+  react-tech-slider@1.10.0(react-dom@19.2.7(react@19.2.7))(react@19.2.7):
     dependencies:
       react: 19.2.7
       react-dom: 19.2.7(react@19.2.7)

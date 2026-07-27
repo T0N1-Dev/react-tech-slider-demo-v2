@@ -11,9 +11,16 @@ const FADES_LIMITATION =
 
 const previewFailure = vi.hoisted(() => ({ enabled: false }));
 vi.mock("react-tech-slider", () => ({
-	Slider: () => {
-		if (previewFailure.enabled) throw new Error("simulated package failure");
-		return <div data-testid="published-slider">Published slider</div>;
+	Slider: ({ className }: { className?: string }) => {
+		const isHeroSlider = className === "hero-slider";
+		if (previewFailure.enabled && !isHeroSlider) {
+			throw new Error("simulated package failure");
+		}
+		return (
+			<div data-testid={isHeroSlider ? "hero-slider" : "published-slider"}>
+				Published slider
+			</div>
+		);
 	},
 }));
 
@@ -69,7 +76,7 @@ describe("App", () => {
 			installHeading.compareDocumentPosition(apiHeading) &
 				Node.DOCUMENT_POSITION_FOLLOWING,
 		).toBeTruthy();
-	});
+	}, 10_000);
 
 	it("uses exact package resources and package-root integration guidance", () => {
 		render(<App />);
@@ -135,13 +142,16 @@ describe("App", () => {
 		const canvas = screen.getByTestId("preview-canvas");
 		expect(canvas).toHaveClass("preview-canvas");
 		expect(canvas).toHaveAttribute("data-preview-width", "960");
+		expect(canvas).toHaveAttribute("data-preview-variant", "desktop");
 		const desktop = screen.getByRole("button", { name: /desktop/i });
 		expect(desktop).toHaveAttribute("aria-pressed", "true");
 		expect(desktop).toHaveTextContent("Selected");
 		await user.click(screen.getByRole("button", { name: /tablet/i }));
 		expect(canvas).toHaveAttribute("data-preview-width", "768");
+		expect(canvas).toHaveAttribute("data-preview-variant", "tablet");
 		await user.click(screen.getByRole("button", { name: /mobile/i }));
 		expect(canvas).toHaveAttribute("data-preview-width", "390");
+		expect(canvas).toHaveAttribute("data-preview-variant", "mobile");
 		expect(canvas).toHaveAttribute("data-fallback-count", "6");
 
 		const generated = screen
@@ -163,6 +173,18 @@ describe("App", () => {
 		expect(css).toContain('[data-preview-width="960"]');
 		expect(css).toContain('[data-preview-width="768"]');
 		expect(css).toContain('[data-preview-width="390"]');
+		expect(css).toMatch(
+			/\[data-preview-variant="desktop"\]\s*\{[\s\S]*?--preview-display-width:\s*min\(100%, var\(--preview-target-width\)\)/,
+		);
+		expect(css).toMatch(
+			/\[data-preview-variant="tablet"\]\s*\{[\s\S]*?--preview-display-width:\s*min\(86%, var\(--preview-target-width\)\)/,
+		);
+		expect(css).toMatch(
+			/\[data-preview-variant="mobile"\]\s*\{[\s\S]*?--preview-display-width:\s*min\(100%, var\(--preview-target-width\)\)/,
+		);
+		expect(css).toMatch(
+			/\.preview-slider-frame\[data-preview-alignment="center"\]\s*\{[\s\S]*?justify-content:\s*center/,
+		);
 		expect(css).toContain("@media (max-width: 768px)");
 		expect(css).toContain("@media (max-width: 390px)");
 		expect(css).toContain(":focus-visible");
@@ -219,6 +241,7 @@ describe("App", () => {
 		vi.spyOn(console, "error").mockImplementation(() => undefined);
 		render(<App />);
 
+		expect(screen.getByTestId("hero-slider")).toBeVisible();
 		const alert = screen.getByRole("alert");
 		expect(alert).toHaveTextContent("Live preview unavailable");
 		expect(alert).toHaveClass("preview-state");

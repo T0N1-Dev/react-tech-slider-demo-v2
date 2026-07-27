@@ -150,7 +150,7 @@ running.backgroundColor: #00000033
 running.isPlay: true
 running.pauseOnHoverActive: false
 running.durationMs: 30000 ms
-fades.gap: 48 px
+fades.gap: 96 px
 fades.speed: 1×
 install tab: npm (owned separately and not reset)
 ```
@@ -241,7 +241,7 @@ The invocation builder applies these emission rules:
 - running entries are limited by type to `iconWidth`, `borderWidth`, `borderColor`, `backgroundColor`, `isPlay`, `pauseOnHoverActive`, and `durationMs`; the running discriminant may be omitted from source because omission selects running;
 - fades entries are limited by type to `iconWidth`, `gap`, and `speed`; both preview and source add `variant="fades"` from the invocation discriminant;
 - running source may omit exact package-default entries because omission reproduces the same result;
-- fades source may omit `speed={1}`, but must emit `gap={48}` because the package's omitted gap is responsive rather than equivalent to 48;
+- fades source may omit `speed={1}`, but must emit `gap={96}` because the package's omitted gap is responsive rather than equivalent to 96;
 - `iconWidth={5}` is emitted because the package's omitted CSS width is responsive and not equivalent to the controlled fixed value;
 - numeric entries become numeric JSX nodes, never prequoted strings.
 
