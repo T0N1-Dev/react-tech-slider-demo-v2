@@ -202,7 +202,7 @@ export function ControlPanel({
           value={state.shared.datasetId}
           onChange={(event) => setDataset(event.target.value as DatasetId)}
         >
-          <option value="core">Core technologies</option>
+          <option value="core">Technologies</option>
           <option value="frontend">Frontend frameworks</option>
         </select>
       </label>
