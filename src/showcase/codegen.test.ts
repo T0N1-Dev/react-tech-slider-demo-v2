@@ -90,9 +90,11 @@ function compileGeneratedTsx(fixtureName: string, source: string) {
 					shouldCreate,
 				);
 	const program = ts.createProgram({ rootNames: [fileName], options, host });
-	return ts.getPreEmitDiagnostics(program).map((diagnostic) =>
-		ts.flattenDiagnosticMessageText(diagnostic.messageText, "\n"),
-	);
+	return ts
+		.getPreEmitDiagnostics(program)
+		.map((diagnostic) =>
+			ts.flattenDiagnosticMessageText(diagnostic.messageText, "\n"),
+		);
 }
 
 describe("slider source generation", () => {
@@ -104,12 +106,10 @@ describe("slider source generation", () => {
 		expect(Object.keys(codegen).sort()).toEqual(["generateSliderCode"]);
 	});
 
-	it(
-		"rejects the exported uncorrelated renderer bypass at type level",
-		() => {
-			const diagnostics = compileGeneratedTsx(
-				"invalid-code-model",
-				`import { renderSliderCode } from "./codegen";
+	it("rejects the exported uncorrelated renderer bypass at type level", () => {
+		const diagnostics = compileGeneratedTsx(
+			"invalid-code-model",
+			`import { renderSliderCode } from "./codegen";
 
 renderSliderCode({
   variant: "fades",
@@ -117,20 +117,16 @@ renderSliderCode({
   props: [{ name: "borderWidth", value: 1, source: "always" }],
 });
 `,
-			);
-			expect(diagnostics.join("\n")).toMatch(
-				/renderSliderCode|no exported member/i,
-			);
-		},
-		30_000,
-	);
+		);
+		expect(diagnostics.join("\n")).toMatch(
+			/renderSliderCode|no exported member/i,
+		);
+	}, 30_000);
 
-	it(
-		"rejects fades with running entries through the canonical renderer",
-		() => {
-			const diagnostics = compileGeneratedTsx(
-				"invalid-canonical-invocation",
-				`import { generateSliderCode } from "./codegen";
+	it("rejects fades with running entries through the canonical renderer", () => {
+		const diagnostics = compileGeneratedTsx(
+			"invalid-canonical-invocation",
+			`import { generateSliderCode } from "./codegen";
 
 generateSliderCode({
   variant: "fades",
@@ -138,11 +134,9 @@ generateSliderCode({
   props: [{ name: "borderWidth", value: 1, source: "always" }],
 });
 `,
-			);
-			expect(diagnostics.join("\n")).toMatch(/borderWidth|FadesPropEntry/i);
-		},
-		15000,
-	);
+		);
+		expect(diagnostics.join("\n")).toMatch(/borderWidth|FadesPropEntry/i);
+	}, 15000);
 
 	it("emits all non-default running values with numeric and boolean JSX expressions", () => {
 		const state = {
@@ -208,21 +202,37 @@ generateSliderCode({
 		const source = generateSliderCode(
 			readyInvocation(undefined, [metadataBrand, { ...BRANDS[1], style: {} }]),
 		);
-		const fields = ["id:", "name:", "img:", "width:", "height:", "style:", "className:"];
-		fields.slice(1).forEach((field, index) =>
-			expect(source.indexOf(fields[index])).toBeLessThan(source.indexOf(field)),
-		);
+		const fields = [
+			"id:",
+			"name:",
+			"img:",
+			"width:",
+			"height:",
+			"style:",
+			"className:",
+		];
+		fields
+			.slice(1)
+			.forEach((field, index) =>
+				expect(source.indexOf(fields[index])).toBeLessThan(
+					source.indexOf(field),
+				),
+			);
 		expect(source).toContain('name: "Dunkin` \\"Brand\\" \\\\"');
-		expect(source).toContain('style: { transition: "width \\"1s\\" \\\\", width: "2rem", zIndex: 3, "--brand-color": "#fff" },');
+		expect(source).toContain(
+			'style: { transition: "width \\"1s\\" \\\\", width: "2rem", zIndex: 3, "--brand-color": "#fff" },',
+		);
 		expect(source).toContain('className: "north\\"Face\\\\",');
 		expect(source).toContain("style: {},");
 	});
 
 	it("omits absent metadata and emits approved Sport/Food metadata exactly", () => {
 		const source = generateSliderCode(
-			readyInvocation(undefined, [SPORT_BRANDS[1], FOOD_BRANDS[8]]),
+			readyInvocation(undefined, [SPORT_BRANDS[1]!, FOOD_BRANDS[5]!]),
 		);
-		expect(source).toContain('style: { transition: "width 1s ease", filter: "invert()" },');
+		expect(source).toContain(
+			'style: { transition: "width 1s ease", filter: "invert()" },',
+		);
 		expect(source).toContain('className: "reebok-icon",');
 		expect(source).toContain('name: "Dunkin`Donuts",');
 		expect(source.match(/className:/g)).toHaveLength(1);
@@ -231,9 +241,14 @@ generateSliderCode({
 
 	it("compiles representative metadata against the published Brand type", () => {
 		const brands = [
-			SPORT_BRANDS[1],
-			FOOD_BRANDS[8],
-			{ id: 20, name: "Styled", img: "https://example.com/styled.svg", style: { width: "2rem", zIndex: 3 } },
+			SPORT_BRANDS[1]!,
+			FOOD_BRANDS[5]!,
+			{
+				id: 20,
+				name: "Styled",
+				img: "https://example.com/styled.svg",
+				style: { width: "2rem", zIndex: 3 },
+			},
 			BRANDS[0],
 		] satisfies Brand[];
 		const source = generateSliderCode(readyInvocation(undefined, brands));
