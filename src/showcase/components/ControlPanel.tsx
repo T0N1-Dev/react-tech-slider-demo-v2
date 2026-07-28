@@ -46,7 +46,7 @@ function RangeField({
         value={value}
         onChange={(event) => onChange(event.currentTarget.value)}
       />
-      <output htmlFor={id}>
+      <output className={id} htmlFor={id}>
         {value} {unit}
       </output>
     </div>

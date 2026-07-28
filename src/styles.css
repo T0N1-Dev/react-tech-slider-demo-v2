@@ -546,7 +546,7 @@ code {
 
 .dataset-picker select,
 .control-field input {
-  width: 100%;
+  width: 95%;
   min-width: 0;
 }
 
@@ -566,14 +566,19 @@ code {
   accent-color: var(--accent);
 }
 
+output {
+  margin-top: -15px;
+}
+
 .color-field {
+  display: grid;
+  justify-items: center;
   grid-template-columns: minmax(0, 1fr);
   align-items: start;
 }
 
-.color-picker {
-  width: 100%;
-  max-width: 18rem;
+.react-colorful.color-picker {
+  width: 90%;
 }
 
 .playback-status {
