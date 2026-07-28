@@ -29,7 +29,19 @@ describe("InstallGuide", () => {
 		installClipboard(writeText);
 		render(<InstallGuide />);
 
-		expect(screen.getByText("npm install react-tech-slider")).toBeVisible();
+		const command = screen.getByText("npm install react-tech-slider");
+		const field = command.closest(".install-command-field");
+		const copyButton = screen.getByRole("button", {
+			name: "Copy install command",
+		});
+		expect(command).toHaveClass("install-command-text");
+		expect(field).toContainElement(command);
+		expect(field).toContainElement(screen.getByLabelText("Terminal prompt"));
+		expect(field).toContainElement(copyButton);
+		expect(copyButton).toHaveAttribute("title", "Copy install command");
+		expect(copyButton).toContainElement(copyButton.querySelector("svg"));
+		expect(copyButton).toHaveTextContent("");
+		expect(field?.querySelectorAll("button")).toHaveLength(1);
 		await user.click(
 			screen.getByRole("button", { name: "Copy install command" }),
 		);
@@ -135,11 +147,9 @@ describe("InstallGuide", () => {
 		const { rerender } = render(<InstallGuide />);
 		const pnpm = screen.getByRole("tab", { name: "pnpm" });
 		await user.click(pnpm);
-		expect(within(pnpm).getByText("✓ Selected")).toBeVisible();
+		expect(within(pnpm).getByText("✓")).toBeVisible();
 		expect(
-			within(screen.getByRole("tab", { name: "npm" })).queryByText(
-				"✓ Selected",
-			),
+			within(screen.getByRole("tab", { name: "npm" })).queryByText("✓"),
 		).not.toBeInTheDocument();
 		rerender(<InstallGuide />);
 		expect(screen.getByRole("tab", { name: "pnpm" })).toHaveAttribute(
@@ -161,5 +171,20 @@ describe("InstallGuide", () => {
 				"Copy failed for install command. Select and copy the text manually.",
 			),
 		).toHaveAttribute("aria-live", "polite");
+	});
+
+	it("remounts copy status when the selected command changes", async () => {
+		const user = userEvent.setup();
+		installClipboard(vi.fn().mockResolvedValue(undefined));
+		render(<InstallGuide />);
+		await user.click(
+			screen.getByRole("button", { name: "Copy install command" }),
+		);
+		expect(screen.getByText("Install command copied to clipboard.")).toBeVisible();
+		await user.click(screen.getByRole("tab", { name: "pnpm" }));
+		expect(
+			screen.queryByText("Install command copied to clipboard."),
+		).not.toBeInTheDocument();
+		expect(screen.getByText(INSTALL_COMMANDS.pnpm)).toBeVisible();
 	});
 });

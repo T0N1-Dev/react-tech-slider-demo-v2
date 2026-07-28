@@ -1,7 +1,13 @@
 import type { Brand } from "react-tech-slider";
 import type { ComponentType } from "react";
 import { useLayoutEffect, useMemo, useReducer, useRef, useState } from "react";
-import { CORE_BRANDS, FRONTEND_BRANDS, validateBrandDataset } from "../brands";
+import {
+	CORE_BRANDS,
+	FOOD_BRANDS,
+	SPORT_BRANDS,
+	validateBrandDataset,
+} from "../brands";
+import { resolveCssColor, type CssColorResolver } from "../color";
 import { generateSliderCode } from "../codegen";
 import {
 	createInitialState,
@@ -16,22 +22,23 @@ import { PreviewPanel, type PreviewPanelProps } from "./PreviewPanel";
 
 const DEFAULT_DATASETS = {
 	core: CORE_BRANDS,
-	frontend: FRONTEND_BRANDS,
-} as const;
+	sport: SPORT_BRANDS,
+	food: FOOD_BRANDS,
+} as const satisfies Readonly<Record<DatasetId, readonly Brand[]>>;
 
 export type PlaygroundPreviewProps = PreviewPanelProps;
 
 interface PlaygroundProps {
 	PreviewComponent?: ComponentType<PlaygroundPreviewProps>;
 	reduceMotion?: boolean;
-	isValidColor?: (candidate: string) => boolean;
+	colorResolver?: CssColorResolver;
 	datasets?: Readonly<Record<DatasetId, readonly Brand[]>>;
 }
 
 export function Playground({
 	PreviewComponent = PreviewPanel,
 	reduceMotion,
-	isValidColor = supportsColor,
+	colorResolver = resolveCssColor,
 	datasets = DEFAULT_DATASETS,
 }: PlaygroundProps) {
 	const [initialState] = useState(() =>
@@ -41,8 +48,8 @@ export function Playground({
 		),
 	);
 	const reducer = useMemo(
-		() => createPlaygroundReducer(initialState, isValidColor),
-		[initialState, isValidColor],
+		() => createPlaygroundReducer(initialState, colorResolver),
+		[initialState, colorResolver],
 	);
 	const [state, dispatch] = useReducer(reducer, initialState);
 	const [retryKey, setRetryKey] = useState(0);
@@ -98,7 +105,7 @@ export function Playground({
 						key={controlsKey}
 						state={state}
 						dispatch={dispatch}
-						isValidColor={isValidColor}
+						colorResolver={colorResolver}
 					/>
 					<button
 						className="reset-button"
@@ -121,14 +128,4 @@ export function Playground({
 			</div>
 		</section>
 	);
-}
-
-function supportsColor(candidate: string): boolean {
-	if (typeof CSS !== "undefined" && typeof CSS.supports === "function") {
-		return CSS.supports("color", candidate);
-	}
-	const probe = document.createElement("span").style;
-	probe.color = "";
-	probe.color = candidate;
-	return probe.color !== "";
 }

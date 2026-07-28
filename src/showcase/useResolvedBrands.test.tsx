@@ -16,12 +16,15 @@ const BRANDS = [
 		img: "https://cdn.simpleicons.org/typescript",
 		width: 6,
 		height: 4,
+		style: { transition: "width 1s ease" },
+		className: "Exact-Case",
 	},
 	{
 		id: 2,
 		name: "React",
 		img: "https://cdn.simpleicons.org/react",
 		height: 5,
+		style: { width: "2rem", zIndex: 3 },
 	},
 ] satisfies Brand[];
 
@@ -184,10 +187,10 @@ describe("useResolvedBrands", () => {
 		expect(images).toHaveLength(2);
 	});
 
-	it("preserves identity, order, and dimensions through pending and ready states", async () => {
+	it("preserves identity, order, dimensions, style, and className through pending and ready states", async () => {
 		const { result } = renderHook(() => useResolvedBrands(BRANDS));
 		const projectIdentity = (brands: readonly Brand[]) =>
-			brands.map(({ id, name, width, height }) => ({ id, name, width, height }));
+			brands.map(({ id, name, width, height, style, className }) => ({ id, name, width, height, style, className }));
 		expect(projectIdentity(result.current.brands)).toEqual(projectIdentity(BRANDS));
 		await loadImage(0);
 		await loadImage(1);
@@ -224,6 +227,9 @@ describe("useResolvedBrands", () => {
 		expect(BRANDS.map(({ img }) => img)).toEqual(canonicalUrls);
 		expect(canonicalSource(BRANDS)).toBe(sourceBefore);
 		expect(sourceBefore).not.toContain("data:image/svg+xml");
+		expect(sourceBefore).toContain('style: { transition: "width 1s ease" },');
+		expect(sourceBefore).toContain('className: "Exact-Case",');
+		expect(sourceBefore).toContain('style: { width: "2rem", zIndex: 3 },');
 		expect(result.current.brands.every(({ img }) => img.startsWith("data:"))).toBe(true);
 	});
 });

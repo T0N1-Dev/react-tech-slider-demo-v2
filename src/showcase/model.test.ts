@@ -1,6 +1,11 @@
-import type { Brand } from "react-tech-slider";
 import { describe, expect, it } from "vitest";
-import { validateBrandDataset } from "./brands";
+import type { CssColorResolver } from "./color";
+import {
+	CORE_BRANDS,
+	FOOD_BRANDS,
+	SPORT_BRANDS,
+	validateBrandDataset,
+} from "./brands";
 import {
 	NUMERIC_DOMAINS,
 	createInitialState,
@@ -12,46 +17,30 @@ import {
 	selectDataset,
 } from "./model";
 
-const CORE_BRANDS = [
-	{
-		id: 1,
-		name: "TypeScript",
-		img: "https://example.com/typescript.svg",
-	},
-	{
-		id: 2,
-		name: "React",
-		img: "https://example.com/react.svg",
-	},
-] satisfies Brand[];
-
-const FRONTEND_BRANDS = [
-	{
-		id: 3,
-		name: "Vite",
-		img: "https://example.com/vite.svg",
-	},
-] satisfies Brand[];
-
 const DATASETS = {
 	core: CORE_BRANDS,
-	frontend: FRONTEND_BRANDS,
+	sport: SPORT_BRANDS,
+	food: FOOD_BRANDS,
 };
 
-const isValidColor = (candidate: string) =>
-	[
+const isValidColor: CssColorResolver = (candidate) => {
+	const canonical = candidate.trim();
+	return [
 		"#00000033",
 		"#7c05d8",
 		"oklch(70% 0.15 250)",
 		"rebeccapurple",
 		"transparent",
-	].includes(candidate);
+	].includes(canonical)
+		? { canonical, pickerHex: "#000000ff" }
+		: null;
+};
 
 const NUMERIC_CASES = [
 	["iconWidth", 5, 1, 10, 0, 11, 1.13, 1.25],
 	["borderWidth", 1, 0, 8, -1, 9, 3.4, 3],
 	["durationMs", 30000, 5000, 120000, 4999, 120001, 5555, 6000],
-	["gap", 48, 0, 180, -1, 181, 51, 52],
+	["gap", 96, 0, 180, -1, 181, 51, 52],
 	["speed", 1, 0.25, 4, 0, 5, 1.13, 1.25],
 ] as const;
 
@@ -130,7 +119,7 @@ describe("playground state", () => {
 				pauseOnHoverActive: false,
 				durationMs: 30000,
 			},
-			fades: { gap: 48, speed: 1 },
+			fades: { gap: 96, speed: 1 },
 		});
 		expect(createInitialState(true)).toEqual({
 			...createInitialState(false),
@@ -138,9 +127,12 @@ describe("playground state", () => {
 		});
 	});
 
-	it("selects only a known dataset", () => {
+	it("selects exactly Core, Sport, and Food with repeated IDs scoped per list", () => {
 		expect(selectDataset("core", DATASETS)).toBe(CORE_BRANDS);
-		expect(selectDataset("frontend", DATASETS)).toBe(FRONTEND_BRANDS);
+		expect(selectDataset("sport", DATASETS)).toBe(SPORT_BRANDS);
+		expect(selectDataset("food", DATASETS)).toBe(FOOD_BRANDS);
+		expect(projectSlider(createInitialState(false), SPORT_BRANDS).status).toBe("ready");
+		expect(projectSlider(createInitialState(false), FOOD_BRANDS).status).toBe("ready");
 	});
 
 	it("uses field-specific actions and preserves separate stores on round trips", () => {
@@ -156,13 +148,13 @@ describe("playground state", () => {
 		state = reduce(state, { type: "SET_VARIANT", value: "fades" });
 		state = reduce(state, { type: "SET_FADES_GAP", value: 74 });
 		state = reduce(state, { type: "SET_FADES_SPEED", value: 2.6 });
-		state = reduce(state, { type: "SET_DATASET", value: "frontend" });
+		state = reduce(state, { type: "SET_DATASET", value: "sport" });
 		state = reduce(state, { type: "SET_VIEWPORT", value: "mobile" });
 
 		expect(state).toEqual({
 			variant: "fades",
 			viewport: "mobile",
-			shared: { datasetId: "frontend", iconWidth: 7 },
+			shared: { datasetId: "sport", iconWidth: 7 },
 			running: {
 				borderWidth: 4,
 				borderColor: "rebeccapurple",
@@ -186,6 +178,20 @@ describe("playground state", () => {
 			shared: state.shared,
 			settings: state.fades,
 		});
+	});
+
+	it("keeps direct range actions finite, stepped, and inside their domains", () => {
+		const initial = createInitialState(false);
+		const reduce = createPlaygroundReducer(initial, isValidColor);
+		let state = reduce(initial, { type: "SET_ICON_WIDTH", value: Number.NaN });
+		state = reduce(state, { type: "SET_BORDER_WIDTH", value: -1 });
+		state = reduce(state, { type: "SET_DURATION_MS", value: Number.POSITIVE_INFINITY });
+		state = reduce(state, { type: "SET_FADES_GAP", value: 181 });
+		state = reduce(state, { type: "SET_FADES_SPEED", value: 0 });
+		expect(state.shared.iconWidth).toBe(5);
+		expect(state.running.borderWidth).toBe(0);
+		expect(state.running.durationMs).toBe(30000);
+		expect(state.fades).toEqual({ gap: 180, speed: 0.25 });
 	});
 
 	it("rejects invalid color commits before canonical state and invocation", () => {
@@ -291,7 +297,7 @@ describe("canonical slider invocation", () => {
 		expect(result.invocation.dataset).toBe(CORE_BRANDS);
 		expect(result.invocation.props).toEqual([
 			{ name: "iconWidth", value: 5, source: "always" },
-			{ name: "gap", value: 48, source: "always" },
+			{ name: "gap", value: 96, source: "always" },
 			{ name: "speed", value: 1, source: "omit-when-package-default" },
 		]);
 	});

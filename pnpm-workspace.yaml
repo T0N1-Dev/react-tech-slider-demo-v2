@@ -1,2 +1,2 @@
 minimumReleaseAgeExclude:
-  - react-tech-slider@1.9.3
+  - react-tech-slider@1.9.3 || 1.10.0 || 1.10.1

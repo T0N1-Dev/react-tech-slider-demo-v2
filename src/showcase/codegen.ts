@@ -48,6 +48,29 @@ function serializeBrand(brand: Brand): string[] {
 		`    img: ${JSON.stringify(brand.img)},`,
 		...(brand.width === undefined ? [] : [`    width: ${brand.width},`]),
 		...(brand.height === undefined ? [] : [`    height: ${brand.height},`]),
+		...(brand.style === undefined
+			? []
+			: [`    style: ${serializeStyle(brand.style)},`]),
+		...(brand.className === undefined
+			? []
+			: [`    className: ${JSON.stringify(brand.className)},`]),
 		"  },",
 	];
+}
+
+function serializeStyle(style: NonNullable<Brand["style"]>): string {
+	const entries = Object.entries(style).map(
+		([key, value]) => `${serializeStyleKey(key)}: ${serializeStyleValue(value)}`,
+	);
+	return `{${entries.length === 0 ? "" : ` ${entries.join(", ")} `}}`;
+}
+
+function serializeStyleKey(key: string): string {
+	return /^[A-Za-z_$][A-Za-z0-9_$]*$/.test(key) ? key : JSON.stringify(key);
+}
+
+function serializeStyleValue(value: unknown): string {
+	if (typeof value === "string") return JSON.stringify(value);
+	if (typeof value === "number" && Number.isFinite(value)) return String(value);
+	throw new Error("Brand style values must be strings or finite numbers.");
 }

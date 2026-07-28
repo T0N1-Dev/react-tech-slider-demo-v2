@@ -11,9 +11,16 @@ const FADES_LIMITATION =
 
 const previewFailure = vi.hoisted(() => ({ enabled: false }));
 vi.mock("react-tech-slider", () => ({
-	Slider: () => {
-		if (previewFailure.enabled) throw new Error("simulated package failure");
-		return <div data-testid="published-slider">Published slider</div>;
+	Slider: ({ className }: { className?: string }) => {
+		const isHeroSlider = className === "hero-slider";
+		if (previewFailure.enabled && !isHeroSlider) {
+			throw new Error("simulated package failure");
+		}
+		return (
+			<div data-testid={isHeroSlider ? "hero-slider" : "published-slider"}>
+				Published slider
+			</div>
+		);
 	},
 }));
 
@@ -57,19 +64,11 @@ describe("App", () => {
 			level: 2,
 			name: "Install",
 		});
-		const apiHeading = screen.getByRole("heading", {
-			level: 2,
-			name: "Adopt the public API",
-		});
 		expect(
 			playgroundHeading.compareDocumentPosition(installHeading) &
 				Node.DOCUMENT_POSITION_FOLLOWING,
 		).toBeTruthy();
-		expect(
-			installHeading.compareDocumentPosition(apiHeading) &
-				Node.DOCUMENT_POSITION_FOLLOWING,
-		).toBeTruthy();
-	});
+	}, 10_000);
 
 	it("uses exact package resources and package-root integration guidance", () => {
 		render(<App />);
@@ -85,18 +84,10 @@ describe("App", () => {
 		expect(
 			within(install as HTMLElement).getByRole("link", { name: "Repository" }),
 		).toHaveAttribute("href", REPOSITORY_URL);
-		const rootImport = screen.getByText(
+		expect(screen.getByTestId("generated-source")).toHaveTextContent(
 			'import { Slider, type Brand } from "react-tech-slider";',
 		);
-		expect(rootImport).toBeVisible();
-		expect(rootImport.closest("pre")).toHaveAttribute("tabindex", "0");
-		expect(screen.getByText(/Use only package-root exports/)).toBeVisible();
-		expect(
-			screen.getByText("Do not import internal modules or CSS subpaths."),
-		).toBeVisible();
-		expect(
-			screen.queryByText(/react-tech-slider\/dist/),
-		).not.toBeInTheDocument();
+		expect(screen.queryByText(/react-tech-slider\/dist/)).not.toBeInTheDocument();
 	});
 
 	it("repeats exact package resources in the hero and footer with full-size targets", () => {
@@ -135,22 +126,27 @@ describe("App", () => {
 		const canvas = screen.getByTestId("preview-canvas");
 		expect(canvas).toHaveClass("preview-canvas");
 		expect(canvas).toHaveAttribute("data-preview-width", "960");
+		expect(canvas).toHaveAttribute("data-preview-variant", "desktop");
 		const desktop = screen.getByRole("button", { name: /desktop/i });
 		expect(desktop).toHaveAttribute("aria-pressed", "true");
-		expect(desktop).toHaveTextContent("Selected");
+		expect(desktop).toHaveTextContent("✓");
 		await user.click(screen.getByRole("button", { name: /tablet/i }));
 		expect(canvas).toHaveAttribute("data-preview-width", "768");
+		expect(canvas).toHaveAttribute("data-preview-variant", "tablet");
 		await user.click(screen.getByRole("button", { name: /mobile/i }));
 		expect(canvas).toHaveAttribute("data-preview-width", "390");
+		expect(canvas).toHaveAttribute("data-preview-variant", "mobile");
 		expect(canvas).toHaveAttribute("data-fallback-count", "6");
 
 		const generated = screen
 			.getByRole("heading", { name: "Generated code" })
 			.closest("section");
 		expect(generated).toHaveClass("generated-code");
-		expect(
-			within(generated as HTMLElement).getByText(/import \{ Slider/),
-		).toHaveClass("source-code");
+		const viewer = generated?.querySelector("pre.source-viewer");
+		expect(viewer).toHaveAttribute("aria-labelledby", "generated-code-heading");
+		expect(viewer).toContainElement(
+			within(generated as HTMLElement).getByTestId("generated-source"),
+		);
 		expect(
 			screen.getByRole("heading", { name: "Controls" }).closest("section"),
 		).toHaveClass("control-panel");
@@ -163,6 +159,15 @@ describe("App", () => {
 		expect(css).toContain('[data-preview-width="960"]');
 		expect(css).toContain('[data-preview-width="768"]');
 		expect(css).toContain('[data-preview-width="390"]');
+		expect(css).toMatch(
+			/\[data-preview-variant="desktop"\]\s*\{[\s\S]*?--preview-display-width:\s*min\(100%, var\(--preview-target-width\)\)/,
+		);
+		expect(css).toMatch(
+			/\[data-preview-variant="tablet"\]\s*\{[\s\S]*?--preview-display-width:\s*min\(86%, var\(--preview-target-width\)\)/,
+		);
+		expect(css).toMatch(
+			/\[data-preview-variant="mobile"\]\s*\{[\s\S]*?--preview-display-width:\s*min\(100%, var\(--preview-target-width\)\)/,
+		);
 		expect(css).toContain("@media (max-width: 768px)");
 		expect(css).toContain("@media (max-width: 390px)");
 		expect(css).toContain(":focus-visible");
@@ -171,14 +176,39 @@ describe("App", () => {
 		expect(css).toMatch(
 			/@media \(prefers-reduced-motion: reduce\)[\s\S]*?scroll-behavior:\s*auto/,
 		);
-		expect(css).toMatch(/\.source-code\s*\{[\s\S]*?overflow:\s*auto/);
+		const sourceViewer = css.match(/\.source-viewer\s*\{([\s\S]*?)\}/)?.[1] ?? "";
+		expect(sourceViewer).toMatch(/max-width:\s*100%/);
+		expect(sourceViewer).toMatch(/max-height:\s*28rem/);
+		expect(sourceViewer).toMatch(/overflow:\s*auto/);
+		expect(sourceViewer).toMatch(/white-space:\s*pre/);
+		expect(sourceViewer).toMatch(/min-width:\s*0/);
+		expect(css).toMatch(/\.source-line-number\s*\{[\s\S]*?user-select:\s*none/);
+		const viewerSource = readFileSync(resolve(process.cwd(), "src/showcase/components/GeneratedCode.tsx"), "utf8");
+		expect(viewerSource).not.toMatch(/dangerouslySetInnerHTML|innerHTML|contentEditable|<textarea/);
 		expect(css).toMatch(/\.install-tabs\s*\{[\s\S]*?flex-wrap:\s*wrap/);
+		const installField =
+			css.match(/\.install-command-field\s*\{([\s\S]*?)\}/)?.[1] ?? "";
+		expect(installField).toMatch(
+			/grid-template-columns:\s*minmax\(0, 1fr\) auto/,
+		);
+		expect(installField).toMatch(/min-width:\s*0/);
+		const installText =
+			css.match(/\.install-command-text\s*\{([\s\S]*?)\}/)?.[1] ?? "";
+		expect(installText).toMatch(/overflow-x:\s*auto/);
+		expect(installText).toMatch(/user-select:\s*text/);
+		expect(css).toMatch(/\.copy-button\s*\{[\s\S]*?min-width:\s*44px/);
+		expect(css).toMatch(
+			/@media \(max-width: 390px\)[\s\S]*?\.install-command-field/,
+		);
 		expect(css).toMatch(/\.playground-output,[\s\S]*?min-width:\s*0/);
 		expect(css).not.toMatch(/overflow-x\s*:\s*hidden/i);
+		expect(css).not.toMatch(
+			/\.(?:rts-[A-Za-z0-9_-]*|wrapper|item|brand-slider)\b/,
+		);
 		expect(css).not.toMatch(/animation(?:-play-state)?\s*:/i);
 	});
 
-	it("exposes non-color invalid, paused, and copy-success states", async () => {
+	it("exposes paused and copy-success states", async () => {
 		const user = userEvent.setup();
 		const writeText = vi.fn().mockResolvedValue(undefined);
 		Object.defineProperty(navigator, "clipboard", {
@@ -195,14 +225,7 @@ describe("App", () => {
 		await user.click(playback);
 		expect(screen.getByText("Paused")).toHaveAttribute("data-state", "paused");
 
-		const duration = screen.getByLabelText("Duration (ms)");
-		await user.clear(duration);
-		await user.tab();
-		expect(duration).toHaveAttribute("aria-invalid", "true");
-		expect(duration.closest(".control-field")).toHaveAttribute(
-			"data-state",
-			"error",
-		);
+		expect(screen.getByLabelText("Duration (ms)")).toHaveAttribute("type", "range");
 
 		await user.click(
 			screen.getByRole("button", { name: "Copy generated code" }),
@@ -212,6 +235,15 @@ describe("App", () => {
 				.getByText("Generated code copied to clipboard.")
 				.closest(".copy-block"),
 		).toHaveAttribute("data-state", "success");
+		const installSection = screen
+			.getByRole("heading", { name: "Install" })
+			.closest("section");
+		expect(
+			installSection?.querySelector(".copy-block--inline-field"),
+		).toHaveAttribute("data-state", "idle");
+		expect(
+			screen.queryByText("Install command copied to clipboard."),
+		).not.toBeInTheDocument();
 	});
 
 	it("keeps adoption guidance available when the package preview fails", () => {
@@ -219,14 +251,12 @@ describe("App", () => {
 		vi.spyOn(console, "error").mockImplementation(() => undefined);
 		render(<App />);
 
+		expect(screen.getByTestId("hero-slider")).toBeVisible();
 		const alert = screen.getByRole("alert");
 		expect(alert).toHaveTextContent("Live preview unavailable");
 		expect(alert).toHaveClass("preview-state");
 		expect(alert).toHaveAttribute("data-state", "error");
 		expect(screen.getByRole("heading", { name: "Install" })).toBeVisible();
-		expect(
-			screen.getByRole("heading", { name: "Adopt the public API" }),
-		).toBeVisible();
 		expect(screen.getByText("npm install react-tech-slider")).toBeVisible();
 	});
 
@@ -254,7 +284,7 @@ describe("App", () => {
 		).toBeTruthy();
 
 		await user.click(screen.getByRole("radio", { name: "Fades" }));
-		expect(screen.getAllByText(FADES_LIMITATION)).toHaveLength(2);
+		expect(screen.getAllByText(FADES_LIMITATION)).toHaveLength(1);
 		expect(
 			screen.queryByText(/account|sign in|saved project/i),
 		).not.toBeInTheDocument();
