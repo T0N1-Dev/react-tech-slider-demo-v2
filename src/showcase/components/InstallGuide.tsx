@@ -1,10 +1,5 @@
-import { createElement, useRef, useState } from "react";
-import {
-  INSTALL_COMMANDS,
-  PACKAGE_URL,
-  REPOSITORY_URL,
-  type PackageManager,
-} from "../constants";
+import { useRef, useState } from "react";
+import { INSTALL_COMMANDS, type PackageManager } from "../constants";
 import { CopyButton } from "./CopyButton";
 
 const MANAGERS: readonly PackageManager[] = ["npm", "pnpm"];
@@ -75,7 +70,7 @@ export function InstallGuide() {
               onKeyDown={(event) => handleKeyDown(event, manager)}
             >
               {manager}
-              {active ? <span aria-hidden="true">✓</span> : null}
+              {active ? <span aria-hidden="true"> &nbsp;✓</span> : null}
             </button>
           );
         })}
@@ -90,24 +85,21 @@ export function InstallGuide() {
           key={selected}
           text={command}
           targetLabel="install command"
-        />
+          presentation="terminal"
+        >
+          <span className="install-command-value">
+            <span
+              className="install-terminal-prompt"
+              aria-label="Terminal prompt"
+            >
+              $
+            </span>
+            <code className="install-command-text" tabIndex={0}>
+              {command}
+            </code>
+          </span>
+        </CopyButton>
       </div>
-      <ul className="resource-links" aria-label="Package resources">
-        <li>
-          {createElement(
-            "a",
-            { href: PACKAGE_URL, className: "resource-link" },
-            "npm package",
-          )}
-        </li>
-        <li>
-          {createElement(
-            "a",
-            { href: REPOSITORY_URL, className: "resource-link" },
-            "Repository",
-          )}
-        </li>
-      </ul>
     </section>
   );
 }

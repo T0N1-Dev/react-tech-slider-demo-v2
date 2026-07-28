@@ -217,7 +217,6 @@ code {
 .resource-link {
   display: inline-flex;
   align-items: center;
-  min-height: 44px;
   padding-block: 0.45rem;
 }
 
@@ -260,6 +259,10 @@ code {
 .subsection-heading {
   margin-top: 0;
   letter-spacing: -0.025em;
+}
+
+#install-heading {
+  margin-bottom: 0.8rem;
 }
 
 .controls {
@@ -415,11 +418,12 @@ code {
   gap: 0.75rem;
 }
 
-.source-code {
-  display: block;
+.source-viewer {
+  min-width: 0;
   max-width: 100%;
   max-height: 28rem;
-  padding: 1rem;
+  margin: 0;
+  padding: 1rem 0;
   border: 1px solid var(--line);
   border-radius: var(--radius-sm);
   background: #080c15;
@@ -429,9 +433,66 @@ code {
   tab-size: 2;
 }
 
+.source-line {
+  display: inline-grid;
+  grid-template-columns: 3rem minmax(0, 1fr);
+  min-width: 100%;
+}
+
+.source-line-number {
+  padding-inline: 0.75rem;
+  color: var(--muted);
+  text-align: right;
+  user-select: none;
+}
+
+.source-line-content {
+  padding-right: 1rem;
+}
+
+.source-token--comment {
+  color: #9aa8c2;
+}
+.source-token--string {
+  color: #a8e6a3;
+}
+.source-token--keyword {
+  color: #c7a6ff;
+}
+.source-token--tag {
+  color: #8be9fd;
+}
+.source-token--attribute {
+  color: #ffd479;
+}
+.source-token--number {
+  color: #ffb3d1;
+}
+.source-token--punctuation {
+  color: #bec8dc;
+}
+
 .copy-button,
 .reset-button {
   justify-self: start;
+}
+
+.copy-button {
+  min-width: 44px;
+}
+
+.copy-button--icon {
+  display: inline-grid;
+  width: 44px;
+  min-height: 44px;
+  padding: 0.65rem;
+  place-items: center;
+}
+
+.copy-button--icon svg {
+  width: 1.15rem;
+  height: 1.15rem;
+  fill: currentColor;
 }
 
 .copy-feedback,
@@ -499,15 +560,20 @@ code {
   font-size: 0.85rem;
 }
 
-.color-field {
-  grid-template-columns: minmax(0, 1fr) minmax(5rem, 0.7fr) 2rem;
+.range-field input[type="range"] {
+  min-height: 44px;
+  padding-inline: 0;
+  accent-color: var(--accent);
 }
 
-.color-swatch {
-  width: 1.75rem;
-  height: 1.75rem;
-  border: 2px solid var(--text);
-  border-radius: 50%;
+.color-field {
+  grid-template-columns: minmax(0, 1fr);
+  align-items: start;
+}
+
+.color-picker {
+  width: 100%;
+  max-width: 18rem;
 }
 
 .playback-status {
@@ -538,6 +604,8 @@ code {
 .install-guide {
   display: grid;
   gap: 1rem;
+  margin-bottom: 0;
+  padding-bottom: 0.5rem;
 }
 
 .install-tabs {
@@ -548,6 +616,45 @@ code {
 
 .install-panel {
   min-width: 0;
+}
+
+.install-command-field {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  min-width: 0;
+  gap: 0.75rem;
+  align-items: center;
+  padding: 0.5rem;
+  border: 1px solid #245138;
+  border-radius: var(--radius-sm);
+  background: #030604;
+}
+
+.install-command-value {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 0.55rem;
+}
+
+.install-terminal-prompt,
+.install-command-text {
+  color: #8fef9d;
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+}
+
+.install-terminal-prompt {
+  padding-left: 0.5rem;
+  font-weight: 800;
+}
+
+.install-command-text {
+  display: block;
+  min-width: 0;
+  padding: 0.5rem 0.5rem 0.5rem 0;
+  overflow-x: auto;
+  white-space: nowrap;
+  user-select: text;
 }
 
 .resource-links {
@@ -666,12 +773,13 @@ code {
     grid-column: 1;
   }
 
-  .color-swatch {
-    margin-top: 0.25rem;
-  }
-
   .preset-group button,
   .install-tabs button {
     flex: 1 1 7rem;
+  }
+
+  .install-command-field {
+    gap: 0.5rem;
+    padding: 0.35rem;
   }
 }

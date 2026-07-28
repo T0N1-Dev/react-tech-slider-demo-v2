@@ -1,6 +1,7 @@
 import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { resolveCssColor, type CssColorResolver } from "../color";
 import { InstallGuide } from "./InstallGuide";
 import type { PlaygroundPreviewProps } from "./Playground";
 import { Playground } from "./Playground";
@@ -29,6 +30,25 @@ vi.mock("react-tech-slider", () => ({
       </div>
     );
   },
+}));
+
+vi.mock("react-colorful", () => ({
+  HexAlphaColorPicker: ({
+    color,
+    onChange,
+    ...props
+  }: {
+    color: string;
+    onChange: (color: string) => void;
+    "aria-label": string;
+  }) => (
+    <input
+      aria-label={props["aria-label"]}
+      data-picker-color={color}
+      value={color}
+      onChange={(event) => onChange(event.currentTarget.value)}
+    />
+  ),
 }));
 
 const previewSpy = vi.fn();
@@ -61,8 +81,17 @@ interface FakeImageInstance {
 
 let preflightImages: FakeImageInstance[] = [];
 
-const isValidColor = (candidate: string) =>
-  ["#7c05d8", "#00000033", "rebeccapurple", "transparent"].includes(candidate);
+const COLOR_PROJECTIONS: Record<string, string> = {
+  rebeccapurple: "#663399ff",
+  transparent: "#00000000",
+  "rgb(10 20 30 / 20%)": "#0a141e33",
+  "hsl(120 100% 25%)": "#008000ff",
+};
+const colorResolver: CssColorResolver = (candidate) => {
+  const canonical = candidate.trim();
+  const pickerHex = COLOR_PROJECTIONS[canonical];
+  return pickerHex ? { canonical, pickerHex } : resolveCssColor(canonical);
+};
 
 function renderPlayground(options?: {
   reduceMotion?: boolean;
@@ -73,7 +102,7 @@ function renderPlayground(options?: {
       <Playground
         PreviewComponent={PreviewBoundary}
         reduceMotion={options?.reduceMotion}
-        isValidColor={isValidColor}
+        colorResolver={colorResolver}
       />
       {options?.withInstall ? <InstallGuide /> : null}
     </>,
@@ -85,6 +114,26 @@ function generatedSource() {
   const code = heading.parentElement?.querySelector("code");
   if (!code) throw new Error("Generated source not found");
   return code.textContent ?? "";
+}
+
+function latestBrands() {
+  const props = sliderSpy.mock.calls.at(-1)?.[0] as Record<string, unknown>;
+  return props.brandsList as Array<Record<string, unknown>>;
+}
+
+function expectGlobalIconWidthInheritance(
+  brands: Array<Record<string, unknown>>,
+  iconWidth = 5,
+) {
+  expect(brands.every((brand) => !("width" in brand) && !("height" in brand))).toBe(true);
+  expect(brands.every((brand) => !("width" in ((brand.style ?? {}) as object)))).toBe(true);
+  expect(sliderSpy.mock.calls.at(-1)?.[0]).toMatchObject({ iconWidth });
+}
+
+function outputFor(input: HTMLElement) {
+  const output = document.querySelector(`output[for="${input.id}"]`);
+  if (!output) throw new Error(`Output not found for ${input.id}`);
+  return output;
 }
 
 beforeEach(() => {
@@ -116,7 +165,7 @@ async function resolvePreflights() {
 
 describe("Playground", () => {
   it("passes exact canonical default running props to the published Slider", () => {
-    render(<Playground reduceMotion={false} isValidColor={isValidColor} />);
+    render(<Playground reduceMotion={false} colorResolver={colorResolver} />);
     expect(screen.getByTestId("published-slider")).toBeVisible();
     expect(sliderSpy).toHaveBeenCalledOnce();
     const props = sliderSpy.mock.calls[0][0] as Record<string, unknown>;
@@ -150,15 +199,60 @@ describe("Playground", () => {
     );
   });
 
-  it("renders default running controls and synchronized generated source", () => {
+  it("offers only Core, Sport, and Food and switches canonical preview/source together", async () => {
+        const user = userEvent.setup();
+        render(<Playground reduceMotion={false} colorResolver={colorResolver} />);
+        const selector = screen.getByLabelText("Demonstration dataset");
+        expect(screen.getAllByRole("option").map((option) => [option.textContent, option.getAttribute("value")])).toEqual([
+          ["Core", "core"],
+          ["Sport", "sport"],
+          ["Food", "food"],
+        ]);
+        expect(screen.queryByRole("option", { name: /frontend/i })).not.toBeInTheDocument();
+        expectGlobalIconWidthInheritance(latestBrands());
+
+        await user.selectOptions(selector, "sport");
+        expect(generatedSource()).toContain("Puma");
+        expect(generatedSource()).toContain("v1744835609/puma-logo-logo-svgrepo-com_ylvldf.svg");
+        expect(generatedSource()).not.toMatch(/New Balance|Converse|Asics/);
+        expect(latestBrands()).toHaveLength(7);
+        expect(latestBrands().map(({ id }) => id)).toEqual([1, 2, 3, 4, 5, 6, 7]);
+        expect(latestBrands()[1]).toMatchObject({ className: "reebok-icon", style: { transition: "width 1s ease", filter: "invert()" } });
+        expectGlobalIconWidthInheritance(latestBrands());
+
+        await user.selectOptions(selector, "food");
+        expect(generatedSource()).toContain("Papa Johns");
+        expect(generatedSource()).toContain("Dunkin`Donuts");
+        expect(generatedSource()).not.toContain("Puma");
+        expect(latestBrands()).toHaveLength(10);
+        expect(latestBrands().map(({ id }) => id)).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
+        expect(latestBrands().every((brand) => !("className" in brand))).toBe(true);
+        expectGlobalIconWidthInheritance(latestBrands());
+      });
+
+      it("applies live global iconWidth to Core, Sport, and Food without masking metadata", async () => {
+        const user = userEvent.setup();
+        render(<Playground reduceMotion={false} colorResolver={colorResolver} />);
+        const selector = screen.getByLabelText("Demonstration dataset");
+        for (const [dataset, width] of [["core", 6], ["sport", 7], ["food", 8]] as const) {
+          await user.selectOptions(selector, dataset);
+          fireEvent.change(screen.getByLabelText("Icon width (rem)"), {
+            target: { value: String(width) },
+          });
+          expectGlobalIconWidthInheritance(latestBrands(), width);
+          expect(generatedSource()).toContain(`iconWidth={${width}}`);
+        }
+      });
+
+      it("renders default running controls and synchronized generated source", () => {
     renderPlayground();
     expect(
       screen.getByRole("region", { name: "Slider playground" }),
     ).toBeVisible();
     expect(screen.getByRole("radio", { name: "Running" })).toBeChecked();
-    expect(screen.getByLabelText("Icon width (rem)")).toHaveValue(5);
-    expect(screen.getByLabelText("Border width (px)")).toHaveValue(1);
-    expect(screen.getByLabelText("Duration (ms)")).toHaveValue(30000);
+expect(screen.getByLabelText("Icon width (rem)")).toHaveValue("5");
+    expect(screen.getByLabelText("Border width (px)")).toHaveValue("1");
+    expect(screen.getByLabelText("Duration (ms)")).toHaveValue("30000");
     expect(generatedSource()).toContain("import { Slider, type Brand }");
     expect(generatedSource()).toContain("iconWidth={5}");
     expect(
@@ -167,38 +261,24 @@ describe("Playground", () => {
     expect(previewSpy).toHaveBeenCalled();
   });
 
-  it("exposes every running range/unit and no fades-only controls", () => {
+it("exposes exact native running ranges and no fades-only controls", () => {
     renderPlayground();
-    expect(screen.getByLabelText("Icon width (rem)")).toHaveAttribute(
-      "min",
-      "1",
-    );
-    expect(screen.getByLabelText("Icon width (rem)")).toHaveAttribute(
-      "max",
-      "10",
-    );
-    expect(screen.getByLabelText("Icon width (rem)")).toHaveAttribute(
-      "step",
-      "0.25",
-    );
-    expect(screen.getByLabelText("Border width (px)")).toHaveAttribute(
-      "min",
-      "0",
-    );
-    expect(screen.getByLabelText("Border width (px)")).toHaveAttribute(
-      "max",
-      "8",
-    );
+    const cases = [
+      ["Icon width (rem)", "1", "10", "0.25", "5 rem"],
+      ["Border width (px)", "0", "8", "1", "1 px"],
+      ["Duration (ms)", "5000", "120000", "1000", "30000 ms"],
+    ] as const;
+    for (const [label, min, max, step, output] of cases) {
+      const input = screen.getByLabelText(label);
+      expect(input).toHaveAttribute("type", "range");
+      expect(input).toHaveAttribute("min", min);
+      expect(input).toHaveAttribute("max", max);
+      expect(input).toHaveAttribute("step", step);
+      expect(input).not.toHaveAttribute("onkeydown");
+      expect(outputFor(input)).toHaveTextContent(output);
+    }
     expect(screen.getByLabelText("Border color")).toHaveValue("#7c05d8");
     expect(screen.getByLabelText("Background color")).toHaveValue("#00000033");
-    expect(screen.getByRole("checkbox", { name: "Playback" })).toBeChecked();
-    expect(
-      screen.getByRole("checkbox", { name: "Pause on hover" }),
-    ).not.toBeChecked();
-    expect(screen.getByLabelText("Duration (ms)")).toHaveAttribute(
-      "step",
-      "1000",
-    );
     expect(screen.queryByLabelText("Gap (px)")).not.toBeInTheDocument();
     expect(screen.queryByLabelText("Speed (×)")).not.toBeInTheDocument();
   });
@@ -207,12 +287,16 @@ describe("Playground", () => {
     const user = userEvent.setup();
     renderPlayground();
     await user.click(screen.getByRole("radio", { name: "Fades" }));
+    expect(screen.getByLabelText("Gap (px)")).toHaveAttribute("type", "range");
+    expect(screen.getByLabelText("Speed (×)")).toHaveAttribute("type", "range");
     expect(screen.getByLabelText("Gap (px)")).toHaveAttribute("min", "0");
     expect(screen.getByLabelText("Gap (px)")).toHaveAttribute("max", "180");
     expect(screen.getByLabelText("Gap (px)")).toHaveAttribute("step", "4");
     expect(screen.getByLabelText("Speed (×)")).toHaveAttribute("min", "0.25");
     expect(screen.getByLabelText("Speed (×)")).toHaveAttribute("max", "4");
     expect(screen.getByLabelText("Speed (×)")).toHaveAttribute("step", "0.25");
+        expect(outputFor(screen.getByLabelText("Gap (px)"))).toHaveTextContent("96 px");
+        expect(outputFor(screen.getByLabelText("Speed (×)"))).toHaveTextContent("1 ×");
     expect(
       screen.queryByLabelText("Border width (px)"),
     ).not.toBeInTheDocument();
@@ -227,66 +311,125 @@ describe("Playground", () => {
     );
   });
 
-  it("retains invalid drafts locally without changing generated source", () => {
-    renderPlayground();
-    const iconWidth = screen.getByLabelText("Icon width (rem)");
-    fireEvent.change(iconWidth, { target: { value: "" } });
-    fireEvent.blur(iconWidth);
-    expect(iconWidth).toHaveValue(null);
-    expect(iconWidth).toHaveAttribute("aria-invalid", "true");
-    expect(
-      screen.getByText(/Enter a finite value from 1 to 10 rem/),
-    ).toBeVisible();
-    expect(generatedSource()).toContain("iconWidth={5}");
+it("renders exactly two projected alpha pickers and removes the swatch path", () => {
+renderPlayground();
+const borderPicker = screen.getByLabelText("Border color picker");
+const backgroundPicker = screen.getByLabelText("Background color picker");
+expect(borderPicker).toHaveAttribute("data-picker-color", "#7c05d8ff");
+expect(backgroundPicker).toHaveAttribute("data-picker-color", "#00000033");
+expect(screen.getAllByLabelText(/color picker$/)).toHaveLength(2);
+expect(document.querySelector(".color-swatch")).not.toBeInTheDocument();
+});
 
-    const borderColor = screen.getByLabelText("Border color");
-    fireEvent.change(borderColor, { target: { value: "not-a-color" } });
-    fireEvent.blur(borderColor);
-    expect(borderColor).toHaveValue("not-a-color");
-    expect(borderColor).toHaveAttribute("aria-invalid", "true");
-    expect(screen.getByText("Enter a valid CSS color.")).toBeVisible();
-    expect(generatedSource()).not.toContain("not-a-color");
-  });
+it("commits picker and precise text colors through one canonical boundary", async () => {
+const user = userEvent.setup();
+render(<Playground reduceMotion={false} colorResolver={colorResolver} />);
+const borderPicker = screen.getByLabelText("Border color picker");
+fireEvent.change(borderPicker, { target: { value: "#12345678" } });
+expect(screen.getByLabelText("Border color")).toHaveValue("#12345678");
+expect(borderPicker).toHaveAttribute("data-picker-color", "#12345678");
+expect(sliderSpy.mock.calls.at(-1)?.[0]).toHaveProperty("borderColor", "#12345678");
+expect(generatedSource()).toContain('borderColor="#12345678"');
 
-  it("normalizes commits and preserves shared/running/fades edits across round trips", async () => {
-    const user = userEvent.setup();
-    renderPlayground();
-    const icon = screen.getByLabelText("Icon width (rem)");
-    await user.clear(icon);
-    await user.type(icon, "7.12");
-    fireEvent.blur(icon);
-    expect(
-      screen.getByText("Adjusted to 7 rem. Allowed range: 1 to 10 rem."),
-    ).toBeVisible();
-    const duration = screen.getByLabelText("Duration (ms)");
-    await user.clear(duration);
-    await user.type(duration, "999999");
-    fireEvent.blur(duration);
-    expect(
-      screen.getByText(
-        "Adjusted to 120000 ms. Allowed range: 5000 to 120000 ms.",
-      ),
-    ).toBeVisible();
-    await user.click(screen.getByRole("checkbox", { name: "Playback" }));
+const borderText = screen.getByLabelText("Border color");
+borderText.focus();
+fireEvent.change(borderText, { target: { value: " rebeccapurple " } });
+fireEvent.keyDown(borderText, { key: "Enter" });
+expect(borderText).toHaveFocus();
+expect(borderText).toHaveValue("rebeccapurple");
+expect(borderPicker).toHaveAttribute("data-picker-color", "#663399ff");
+expect(sliderSpy.mock.calls.at(-1)?.[0]).toHaveProperty("borderColor", "rebeccapurple");
+expect(generatedSource()).toContain('borderColor="rebeccapurple"');
+
+const backgroundText = screen.getByLabelText("Background color");
+fireEvent.change(backgroundText, { target: { value: "hsl(120 100% 25%)" } });
+fireEvent.blur(backgroundText);
+const backgroundPicker = screen.getByLabelText("Background color picker");
+expect(backgroundPicker).toHaveAttribute("data-picker-color", "#008000ff");
+fireEvent.change(backgroundPicker, { target: { value: "#abcdef00" } });
+expect(backgroundText).toHaveValue("#abcdef00");
+expect(sliderSpy.mock.calls.at(-1)?.[0]).toMatchObject({
+borderColor: "rebeccapurple",
+backgroundColor: "#abcdef00",
+});
+
+fireEvent.change(borderText, { target: { value: "transparent" } });
+fireEvent.blur(borderText);
+fireEvent.change(backgroundText, {
+target: { value: "rgb(10 20 30 / 20%)" },
+});
+fireEvent.blur(backgroundText);
+expect(borderPicker).toHaveAttribute("data-picker-color", "#00000000");
+expect(backgroundPicker).toHaveAttribute("data-picker-color", "#0a141e33");
+expect(sliderSpy.mock.calls.at(-1)?.[0]).toMatchObject({
+borderColor: "transparent",
+backgroundColor: "rgb(10 20 30 / 20%)",
+});
+
+await user.click(screen.getByRole("radio", { name: "Fades" }));
+await user.click(screen.getByRole("radio", { name: "Running" }));
+expect(screen.getByLabelText("Border color")).toHaveValue("transparent");
+expect(screen.getByLabelText("Background color")).toHaveValue(
+"rgb(10 20 30 / 20%)",
+);
+});
+
+it("retains invalid color drafts without changing canonical picker, preview, or source", async () => {
+const user = userEvent.setup();
+render(<Playground reduceMotion={false} colorResolver={colorResolver} />);
+const borderColor = screen.getByLabelText("Border color");
+const borderPicker = screen.getByLabelText("Border color picker");
+fireEvent.change(borderColor, { target: { value: "not-a-color" } });
+borderColor.focus();
+fireEvent.keyDown(borderColor, { key: "Enter" });
+expect(borderColor).toHaveValue("not-a-color");
+expect(borderColor).toHaveFocus();
+expect(borderColor).toHaveAttribute("aria-invalid", "true");
+expect(screen.getByText("Enter a valid CSS color.")).toBeVisible();
+expect(borderPicker).toHaveAttribute("data-picker-color", "#7c05d8ff");
+expect(sliderSpy.mock.calls.at(-1)?.[0]).toHaveProperty("borderColor", "#7c05d8");
+expect(generatedSource()).not.toContain("not-a-color");
+
+await user.click(screen.getByRole("radio", { name: "Fades" }));
+expect(screen.queryByLabelText("Border color picker")).not.toBeInTheDocument();
+await user.click(screen.getByRole("radio", { name: "Running" }));
+expect(screen.getByLabelText("Border color")).toHaveValue("#7c05d8");
+fireEvent.change(screen.getByLabelText("Border color"), {
+target: { value: "still-invalid" },
+});
+await user.click(screen.getByRole("button", { name: "Reset playground" }));
+expect(screen.getByLabelText("Border color")).toHaveValue("#7c05d8");
+});
+
+it("updates all five ranges in output, preview props, and source before blur", async () => {
+const user = userEvent.setup();
+render(<Playground reduceMotion={false} colorResolver={colorResolver} />);
+    const change = (label: string, value: number, unit: string, prop: string) => {
+      const input = screen.getByLabelText(label);
+      fireEvent.change(input, { target: { value: String(value) } });
+      expect(input).toHaveValue(String(value));
+      expect(outputFor(input)).toHaveTextContent(`${value} ${unit}`);
+      expect(sliderSpy.mock.calls.at(-1)?.[0]).toHaveProperty(prop, value);
+      expect(generatedSource()).toContain(`${prop}={${value}}`);
+    };
+
+    change("Icon width (rem)", 6.25, "rem", "iconWidth");
+    change("Border width (px)", 4, "px", "borderWidth");
+    change("Duration (ms)", 45000, "ms", "durationMs");
     await user.click(screen.getByRole("radio", { name: "Fades" }));
-    const gap = screen.getByLabelText("Gap (px)");
-    await user.clear(gap);
-    await user.type(gap, "82");
-    fireEvent.blur(gap);
-    expect(
-      screen.getByText("Adjusted to 84 px. Allowed range: 0 to 180 px."),
-    ).toBeVisible();
-    expect(screen.getByLabelText("Icon width (rem)")).toHaveValue(7);
-    expect(screen.getByLabelText("Gap (px)")).toHaveValue(84);
+    change("Gap (px)", 84, "px", "gap");
+    change("Speed (×)", 1.5, "×", "speed");
+    expect(sliderSpy.mock.calls.at(-1)?.[0]).not.toHaveProperty("borderWidth");
+    expect(generatedSource()).not.toContain("durationMs");
+
     await user.click(screen.getByRole("radio", { name: "Running" }));
-    expect(screen.getByLabelText("Duration (ms)")).toHaveValue(120000);
-    expect(
-      screen.getByRole("checkbox", { name: "Playback" }),
-    ).not.toBeChecked();
-    expect(generatedSource()).toContain("isPlay={false}");
+    expect(screen.getByLabelText("Icon width (rem)")).toHaveValue("6.25");
+    expect(screen.getByLabelText("Border width (px)")).toHaveValue("4");
+    expect(screen.getByLabelText("Duration (ms)")).toHaveValue("45000");
     await user.click(screen.getByRole("radio", { name: "Fades" }));
-    expect(screen.getByLabelText("Gap (px)")).toHaveValue(84);
-  }, 10_000);
+    expect(screen.getByLabelText("Gap (px)")).toHaveValue("84");
+    expect(screen.getByLabelText("Speed (×)")).toHaveValue("1.5");
+  });
 
   it("keeps viewport preview-only and initializes running paused for reduced motion", async () => {
     const user = userEvent.setup();
@@ -306,40 +449,40 @@ describe("Playground", () => {
     expect(generatedSource()).not.toMatch(/viewport|mobile/);
   });
 
-  it("clears invalid local drafts during atomic reset", async () => {
+it("resets all shared and variant-specific ranges atomically", async () => {
     const user = userEvent.setup();
     renderPlayground();
-    const icon = screen.getByLabelText("Icon width (rem)");
-    fireEvent.change(icon, { target: { value: "" } });
-    fireEvent.blur(icon);
-    expect(icon).toHaveAttribute("aria-invalid", "true");
+    fireEvent.change(screen.getByLabelText("Icon width (rem)"), { target: { value: "7" } });
+    fireEvent.change(screen.getByLabelText("Border width (px)"), { target: { value: "4" } });
+    fireEvent.change(screen.getByLabelText("Duration (ms)"), { target: { value: "45000" } });
+    await user.click(screen.getByRole("radio", { name: "Fades" }));
+    fireEvent.change(screen.getByLabelText("Gap (px)"), { target: { value: "80" } });
+    fireEvent.change(screen.getByLabelText("Speed (×)"), { target: { value: "2" } });
     await user.click(screen.getByRole("button", { name: "Reset playground" }));
-    expect(screen.getByLabelText("Icon width (rem)")).toHaveValue(5);
-    expect(screen.getByLabelText("Icon width (rem)")).not.toHaveAttribute(
-      "aria-invalid",
-    );
-    expect(
-      screen.queryByText(/Enter a finite value from 1 to 10 rem/),
-    ).not.toBeInTheDocument();
+    expect(screen.getByRole("radio", { name: "Running" })).toBeChecked();
+    expect(screen.getByLabelText("Icon width (rem)")).toHaveValue("5");
+    expect(screen.getByLabelText("Border width (px)")).toHaveValue("1");
+    expect(screen.getByLabelText("Duration (ms)")).toHaveValue("30000");
+    await user.click(screen.getByRole("radio", { name: "Fades" }));
+    expect(screen.getByLabelText("Gap (px)")).toHaveValue("96");
+    expect(screen.getByLabelText("Speed (×)")).toHaveValue("1");
   });
 
   it("atomically resets both stores, dataset, viewport, and focus", async () => {
     const user = userEvent.setup();
     renderPlayground();
-    await user.selectOptions(
+await user.selectOptions(
       screen.getByLabelText("Demonstration dataset"),
-      "frontend",
+      "sport",
     );
-    const border = screen.getByLabelText("Border width (px)");
-    await user.clear(border);
-    await user.type(border, "4");
-    fireEvent.blur(border);
-    await user.click(screen.getByRole("radio", { name: "Fades" }));
-    const gap = screen.getByLabelText("Gap (px)");
-    await user.clear(gap);
-    await user.type(gap, "80");
-    fireEvent.blur(gap);
-    await user.click(
+fireEvent.change(screen.getByLabelText("Border width (px)"), {
+          target: { value: "4" },
+        });
+        await user.click(screen.getByRole("radio", { name: "Fades" }));
+fireEvent.change(screen.getByLabelText("Gap (px)"), {
+          target: { value: "80" },
+        });
+        await user.click(
       within(screen.getByTestId("preview-boundary")).getByRole("button", {
         name: "mobile",
       }),
@@ -351,14 +494,14 @@ describe("Playground", () => {
       screen.getByText("Playground reset to initial settings."),
     ).toHaveAttribute("aria-live", "polite");
     expect(screen.getByRole("radio", { name: "Running" })).toBeChecked();
-    expect(screen.getByLabelText("Demonstration dataset")).toHaveValue("core");
-    expect(screen.getByLabelText("Border width (px)")).toHaveValue(1);
+expect(screen.getByLabelText("Demonstration dataset")).toHaveValue("core");
+    expect(screen.getByLabelText("Border width (px)")).toHaveValue("1");
     expect(screen.getByTestId("preview-boundary")).toHaveAttribute(
       "data-viewport",
       "desktop",
     );
     await user.click(screen.getByRole("radio", { name: "Fades" }));
-    expect(screen.getByLabelText("Gap (px)")).toHaveValue(96);
+    expect(screen.getByLabelText("Gap (px)")).toHaveValue("96");
   });
 
   it("keeps selected variant focus and install selection independent from reset", async () => {
@@ -378,7 +521,7 @@ describe("Playground", () => {
 
   it("passes exact fades props and excludes running or preview-only keys", async () => {
     const user = userEvent.setup();
-    render(<Playground reduceMotion={false} isValidColor={isValidColor} />);
+    render(<Playground reduceMotion={false} colorResolver={colorResolver} />);
     await user.click(screen.getByRole("radio", { name: "Fades" }));
     const props = sliderSpy.mock.calls.at(-1)?.[0] as Record<string, unknown>;
     expect(Object.keys(props).sort()).toEqual([
@@ -394,10 +537,7 @@ describe("Playground", () => {
       gap: 96,
       speed: 1,
     });
-    expect(screen.getByTestId("preview-slider-frame")).toHaveAttribute(
-      "data-preview-alignment",
-      "center",
-    );
+expect(screen.queryByTestId("preview-slider-frame")).not.toBeInTheDocument();
     for (const forbidden of [
       "borderWidth",
       "isPlay",
@@ -414,8 +554,8 @@ describe("Playground", () => {
     const { unmount } = render(
       <Playground
         reduceMotion={false}
-        isValidColor={isValidColor}
-        datasets={{ core: [], frontend: [] }}
+        colorResolver={colorResolver}
+        datasets={{ core: [], sport: [], food: [] }}
       />,
     );
     expect(sliderSpy).not.toHaveBeenCalled();
@@ -439,8 +579,8 @@ describe("Playground", () => {
     render(
       <Playground
         reduceMotion={false}
-        isValidColor={isValidColor}
-        datasets={{ core: duplicate, frontend: duplicate }}
+        colorResolver={colorResolver}
+        datasets={{ core: duplicate, sport: duplicate, food: duplicate }}
       />,
     );
     expect(sliderSpy).not.toHaveBeenCalled();
@@ -457,7 +597,7 @@ describe("Playground", () => {
 
   it("changes preset metadata without changing generated source", async () => {
     const user = userEvent.setup();
-    render(<Playground reduceMotion={false} isValidColor={isValidColor} />);
+    render(<Playground reduceMotion={false} colorResolver={colorResolver} />);
     const before = generatedSource();
     expect(screen.getByRole("button", { name: /desktop/i })).toHaveAttribute(
       "aria-pressed",
@@ -477,7 +617,7 @@ describe("Playground", () => {
   });
 
   it("reports only late matching canonical image failures", async () => {
-    render(<Playground reduceMotion={false} isValidColor={isValidColor} />);
+    render(<Playground reduceMotion={false} colorResolver={colorResolver} />);
     await resolvePreflights();
     let props = sliderSpy.mock.calls.at(-1)?.[0] as Record<string, unknown>;
     const readyBrands = props.brandsList as Array<{ img: string }>;
@@ -499,7 +639,7 @@ describe("Playground", () => {
   });
 
   it("remains usable when every remote image is on fallback", () => {
-    render(<Playground reduceMotion={false} isValidColor={isValidColor} />);
+    render(<Playground reduceMotion={false} colorResolver={colorResolver} />);
     act(() => {
       for (const image of preflightImages) image.onerror?.();
     });
@@ -523,7 +663,7 @@ describe("Playground", () => {
     const user = userEvent.setup();
     render(
       <>
-        <Playground reduceMotion={false} isValidColor={isValidColor} />
+        <Playground reduceMotion={false} colorResolver={colorResolver} />
         <InstallGuide />
       </>,
     );
@@ -557,12 +697,11 @@ describe("Playground", () => {
       .spyOn(console, "error")
       .mockImplementation(() => undefined);
     const user = userEvent.setup();
-    render(<Playground reduceMotion={false} isValidColor={isValidColor} />);
-    const border = screen.getByLabelText("Border width (px)");
-    await user.clear(border);
-    await user.type(border, "4");
-    fireEvent.blur(border);
-    sliderControl.shouldThrow = true;
+    render(<Playground reduceMotion={false} colorResolver={colorResolver} />);
+fireEvent.change(screen.getByLabelText("Border width (px)"), {
+          target: { value: "4" },
+        });
+        sliderControl.shouldThrow = true;
     await user.click(screen.getByRole("checkbox", { name: "Playback" }));
     expect(screen.getByRole("alert")).toBeVisible();
     sliderControl.shouldThrow = false;
@@ -579,20 +718,19 @@ describe("Playground", () => {
       .spyOn(console, "error")
       .mockImplementation(() => undefined);
     const user = userEvent.setup();
-    render(<Playground reduceMotion={false} isValidColor={isValidColor} />);
+    render(<Playground reduceMotion={false} colorResolver={colorResolver} />);
     await user.click(screen.getByRole("radio", { name: "Fades" }));
     sliderControl.shouldThrow = true;
-    const gap = screen.getByLabelText("Gap (px)");
-    await user.clear(gap);
-    await user.type(gap, "80");
-    fireEvent.blur(gap);
-    expect(screen.getByRole("alert")).toBeVisible();
+fireEvent.change(screen.getByLabelText("Gap (px)"), {
+          target: { value: "80" },
+        });
+        expect(screen.getByRole("alert")).toBeVisible();
     sliderControl.shouldThrow = false;
     await user.click(
       screen.getByRole("button", { name: "Reset settings and retry" }),
     );
     expect(screen.getByRole("radio", { name: "Running" })).toBeChecked();
-    expect(screen.getByLabelText("Border width (px)")).toHaveValue(1);
+expect(screen.getByLabelText("Border width (px)")).toHaveValue("1");
     expect(screen.getByRole("heading", { name: "Live preview" })).toHaveFocus();
     consoleError.mockRestore();
   });

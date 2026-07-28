@@ -1,8 +1,9 @@
 import { useState, type Dispatch } from "react";
+import { HexAlphaColorPicker } from "react-colorful";
+import type { CssColorResolver } from "../color";
 import {
   NUMERIC_DOMAINS,
   normalizeColor,
-  normalizeNumber,
   type DatasetId,
   type NumericDomain,
   type PlaygroundAction,
@@ -13,83 +14,41 @@ import {
 interface ControlPanelProps {
   state: PlaygroundState;
   dispatch: Dispatch<PlaygroundAction>;
-  isValidColor: (candidate: string) => boolean;
+  colorResolver: CssColorResolver;
 }
 
-interface NumericFieldProps {
+interface RangeFieldProps {
   id: string;
   label: string;
   unit: string;
   value: number;
   domain: NumericDomain;
-  onCommit: (value: number) => void;
+  onChange: (raw: string) => void;
 }
 
-function NumericField({
+function RangeField({
   id,
   label,
   unit,
   value,
   domain,
-  onCommit,
-}: NumericFieldProps) {
-  const [edit, setEdit] = useState({ baseValue: value, text: String(value) });
-  const draft = edit.baseValue === value ? edit.text : String(value);
-  const [feedback, setFeedback] = useState<
-    { kind: "error" | "correction"; message: string } | undefined
-  >();
-  const feedbackId = `${id}-feedback`;
-
-  const commit = () => {
-    const result = normalizeNumber(draft, domain, value);
-    if (result.status === "invalid") {
-      setFeedback({
-        kind: "error",
-        message: `Enter a finite value from ${domain.min} to ${domain.max} ${unit}.`,
-      });
-      return;
-    }
-    setFeedback(
-      result.status === "corrected"
-        ? {
-            kind: "correction",
-            message: `Adjusted to ${result.value} ${unit}. Allowed range: ${domain.min} to ${domain.max} ${unit}.`,
-          }
-        : undefined,
-    );
-    setEdit({ baseValue: result.value, text: String(result.value) });
-    onCommit(result.value);
-  };
-
+  onChange,
+}: RangeFieldProps) {
   return (
-    <div className="control-field" data-state={feedback?.kind ?? "idle"}>
+    <div className="control-field range-field">
       <label htmlFor={id}>{label}</label>
       <input
         id={id}
-        type="number"
+        type="range"
         min={domain.min}
         max={domain.max}
         step={domain.step}
-        value={draft}
-        aria-invalid={feedback?.kind === "error" ? "true" : undefined}
-        aria-describedby={feedback ? feedbackId : undefined}
-        onChange={(event) => {
-          setEdit({ baseValue: value, text: event.target.value });
-          setFeedback(undefined);
-        }}
-        onBlur={commit}
-        onKeyDown={(event) => {
-          if (event.key === "Enter") event.currentTarget.blur();
-        }}
+        value={value}
+        onChange={(event) => onChange(event.currentTarget.value)}
       />
       <output htmlFor={id}>
         {value} {unit}
       </output>
-      {feedback ? (
-        <span className="field-feedback" id={feedbackId}>
-          {feedback.message}
-        </span>
-      ) : null}
     </div>
   );
 }
@@ -98,7 +57,7 @@ interface ColorFieldProps {
   id: string;
   label: string;
   value: string;
-  isValidColor: (candidate: string) => boolean;
+  colorResolver: CssColorResolver;
   onCommit: (value: string) => void;
 }
 
@@ -106,15 +65,17 @@ function ColorField({
   id,
   label,
   value,
-  isValidColor,
+  colorResolver,
   onCommit,
 }: ColorFieldProps) {
   const [draft, setDraft] = useState(value);
   const [error, setError] = useState("");
   const errorId = `${id}-error`;
+  const resolvedValue = colorResolver(value);
+  if (!resolvedValue) throw new Error(`Unresolvable canonical color: ${value}`);
 
   const commit = () => {
-    const result = normalizeColor(draft, value, isValidColor);
+    const result = normalizeColor(draft, value, colorResolver);
     if (result.status === "invalid") {
       setError("Enter a valid CSS color.");
       return;
@@ -123,11 +84,20 @@ function ColorField({
     setDraft(result.value);
     onCommit(result.value);
   };
+  const setPickerColor = (candidate: string) => {
+    const resolved = colorResolver(candidate);
+    if (!resolved) return;
+    setError("");
+    setDraft(resolved.canonical);
+    onCommit(resolved.canonical);
+  };
 
   return (
     <div
       className="control-field color-field"
       data-state={error ? "error" : "idle"}
+      role="group"
+      aria-label={`${label} control`}
     >
       <label htmlFor={id}>{label}</label>
       <input
@@ -142,14 +112,17 @@ function ColorField({
         }}
         onBlur={commit}
         onKeyDown={(event) => {
-          if (event.key === "Enter") event.currentTarget.blur();
+          if (event.key === "Enter") {
+            event.preventDefault();
+            commit();
+          }
         }}
       />
-      <span
-        className="color-swatch"
-        aria-hidden="true"
-        title={`${label} swatch`}
-        style={{ backgroundColor: value }}
+      <HexAlphaColorPicker
+        className="color-picker"
+        aria-label={`${label} picker`}
+        color={resolvedValue.pickerHex}
+        onChange={setPickerColor}
       />
       {error ? (
         <span className="field-feedback" id={errorId}>
@@ -163,7 +136,7 @@ function ColorField({
 export function ControlPanel({
   state,
   dispatch,
-  isValidColor,
+  colorResolver,
 }: ControlPanelProps) {
   const setVariant = (variant: SliderVariant) =>
     dispatch({ type: "SET_VARIANT", value: variant });
@@ -202,43 +175,42 @@ export function ControlPanel({
           value={state.shared.datasetId}
           onChange={(event) => setDataset(event.target.value as DatasetId)}
         >
-          <option value="core">Technologies</option>
-          <option value="frontend">Frontend frameworks</option>
+          <option value="core">Core</option>
+          <option value="sport">Sport</option>
+          <option value="food">Food</option>
         </select>
       </label>
-      <NumericField
+      <RangeField
         id="icon-width"
         label="Icon width (rem)"
         unit="rem"
         value={state.shared.iconWidth}
         domain={NUMERIC_DOMAINS.iconWidth}
-        onCommit={(value) => dispatch({ type: "SET_ICON_WIDTH", value })}
+        onChange={(value) => dispatch({ type: "SET_ICON_WIDTH", value })}
       />
       {state.variant === "running" ? (
         <fieldset>
           <legend>Running settings</legend>
-          <NumericField
+          <RangeField
             id="border-width"
             label="Border width (px)"
             unit="px"
             value={state.running.borderWidth}
             domain={NUMERIC_DOMAINS.borderWidth}
-            onCommit={(value) => dispatch({ type: "SET_BORDER_WIDTH", value })}
+            onChange={(value) => dispatch({ type: "SET_BORDER_WIDTH", value })}
           />
           <ColorField
-            key={`border-color-${state.running.borderColor}`}
             id="border-color"
             label="Border color"
             value={state.running.borderColor}
-            isValidColor={isValidColor}
+            colorResolver={colorResolver}
             onCommit={(value) => dispatch({ type: "SET_BORDER_COLOR", value })}
           />
           <ColorField
-            key={`background-${state.running.backgroundColor}`}
             id="background-color"
             label="Background color"
             value={state.running.backgroundColor}
-            isValidColor={isValidColor}
+            colorResolver={colorResolver}
             onCommit={(value) =>
               dispatch({ type: "SET_BACKGROUND_COLOR", value })
             }
@@ -275,33 +247,33 @@ export function ControlPanel({
             />
             Pause on hover
           </label>
-          <NumericField
+          <RangeField
             id="duration-ms"
             label="Duration (ms)"
             unit="ms"
             value={state.running.durationMs}
             domain={NUMERIC_DOMAINS.durationMs}
-            onCommit={(value) => dispatch({ type: "SET_DURATION_MS", value })}
+            onChange={(value) => dispatch({ type: "SET_DURATION_MS", value })}
           />
         </fieldset>
       ) : (
         <fieldset>
           <legend>Fades settings</legend>
-          <NumericField
+          <RangeField
             id="fades-gap"
             label="Gap (px)"
             unit="px"
             value={state.fades.gap}
             domain={NUMERIC_DOMAINS.gap}
-            onCommit={(value) => dispatch({ type: "SET_FADES_GAP", value })}
+            onChange={(value) => dispatch({ type: "SET_FADES_GAP", value })}
           />
-          <NumericField
+          <RangeField
             id="fades-speed"
             label="Speed (×)"
             unit="×"
             value={state.fades.speed}
             domain={NUMERIC_DOMAINS.speed}
-            onCommit={(value) => dispatch({ type: "SET_FADES_SPEED", value })}
+            onChange={(value) => dispatch({ type: "SET_FADES_SPEED", value })}
           />
           <p className="limitation-note" role="note">
             The fades variant cannot be paused through the current public API.
